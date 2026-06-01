@@ -1,0 +1,229 @@
+import fs from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
+import path from 'node:path';
+import type { HandoffNoteRecord, MemoryRecord, MemoryStatus, MemoryType } from '../types/memory.js';
+import type { ProjectIdentity, ResolvedProjectInput } from '../types/project.js';
+import { createId } from '../utils/ids.js';
+import { nowIso } from '../utils/time.js';
+import { migrations } from './migrations.js';
+
+interface MemoryInsertInput {
+  projectId: string;
+  type: MemoryType;
+  title: string;
+  content: string;
+  summary: string | null;
+  source: string;
+  tags: string[];
+  importance: number;
+}
+
+interface MemoryListInput {
+  projectId: string;
+  status: MemoryStatus;
+  type?: MemoryType;
+  limit: number;
+  offset: number;
+}
+
+interface HandoffInsertInput {
+  projectId: string;
+  taskTitle: string;
+  changedFiles: string[];
+  changedModules: string[];
+  summary: string;
+  verification: string;
+  risks: string;
+  nextSteps: string;
+}
+
+interface MemoryListOutput {
+  items: MemoryRecord[];
+  total: number;
+}
+
+export interface SqliteAdapter {
+  initialize(): void;
+  upsertProject(input: ResolvedProjectInput): ProjectIdentity;
+  createMemory(input: MemoryInsertInput): MemoryRecord;
+  listMemories(input: MemoryListInput): MemoryListOutput;
+  archiveMemory(projectId: string, memoryId: string): MemoryRecord | null;
+  createHandoffNote(input: HandoffInsertInput): HandoffNoteRecord;
+  listRecentHandoffs(projectId: string, limit: number): HandoffNoteRecord[];
+  searchMemories(input: { projectId: string; query: string; types?: MemoryType[]; limit: number }): MemoryRecord[];
+  close(): void;
+}
+
+function rowToProject(row: Record<string, unknown>): ProjectIdentity {
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    workspacePath: String(row.workspace_path),
+    gitRemote: row.git_remote === null ? null : String(row.git_remote),
+    gitBranch: row.git_branch === null ? null : String(row.git_branch),
+    fingerprint: String(row.fingerprint),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+    lastAccessedAt: String(row.last_accessed_at)
+  };
+}
+
+function rowToMemory(row: Record<string, unknown>): MemoryRecord {
+  return {
+    id: String(row.id),
+    projectId: String(row.project_id),
+    type: row.type as MemoryType,
+    title: String(row.title),
+    content: String(row.content),
+    summary: row.summary === null ? null : String(row.summary),
+    source: String(row.source),
+    tags: JSON.parse(String(row.tags)) as string[],
+    status: row.status as MemoryStatus,
+    importance: Number(row.importance),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+    archivedAt: row.archived_at === null ? null : String(row.archived_at)
+  };
+}
+
+function rowToHandoff(row: Record<string, unknown>): HandoffNoteRecord {
+  return {
+    id: String(row.id),
+    projectId: String(row.project_id),
+    taskTitle: String(row.task_title),
+    changedFiles: JSON.parse(String(row.changed_files)) as string[],
+    changedModules: JSON.parse(String(row.changed_modules)) as string[],
+    summary: String(row.summary),
+    verification: String(row.verification),
+    risks: String(row.risks),
+    nextSteps: String(row.next_steps),
+    createdAt: String(row.created_at)
+  };
+}
+
+export function createSqliteAdapter(databasePath: string): SqliteAdapter {
+  fs.mkdirSync(path.dirname(databasePath), { recursive: true });
+  const database = new DatabaseSync(databasePath);
+
+  return {
+    initialize(): void {
+      database.exec('PRAGMA foreign_keys = ON');
+      for (const migration of migrations) {
+        database.exec(migration);
+      }
+    },
+
+    upsertProject(input: ResolvedProjectInput): ProjectIdentity {
+      const existing = database.prepare('SELECT * FROM projects WHERE fingerprint = ?').get(input.fingerprint) as Record<string, unknown> | undefined;
+      const timestamp = nowIso();
+      if (existing) {
+        database.prepare('UPDATE projects SET name = ?, workspace_path = ?, git_remote = ?, git_branch = ?, updated_at = ?, last_accessed_at = ? WHERE fingerprint = ?').run(
+          input.name,
+          input.workspacePath,
+          input.gitRemote,
+          input.gitBranch,
+          timestamp,
+          timestamp,
+          input.fingerprint
+        );
+        return rowToProject(database.prepare('SELECT * FROM projects WHERE fingerprint = ?').get(input.fingerprint) as Record<string, unknown>);
+      }
+
+      const id = createId('proj');
+      database.prepare('INSERT INTO projects (id, name, workspace_path, git_remote, git_branch, fingerprint, created_at, updated_at, last_accessed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+        id,
+        input.name,
+        input.workspacePath,
+        input.gitRemote,
+        input.gitBranch,
+        input.fingerprint,
+        timestamp,
+        timestamp,
+        timestamp
+      );
+      return rowToProject(database.prepare('SELECT * FROM projects WHERE id = ?').get(id) as Record<string, unknown>);
+    },
+
+    createMemory(input: MemoryInsertInput): MemoryRecord {
+      const id = createId('mem');
+      const timestamp = nowIso();
+      const tags = JSON.stringify(input.tags);
+      database.prepare("INSERT INTO memories (id, project_id, type, title, content, summary, source, tags, status, importance, created_at, updated_at, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, NULL)").run(
+        id,
+        input.projectId,
+        input.type,
+        input.title,
+        input.content,
+        input.summary,
+        input.source,
+        tags,
+        input.importance,
+        timestamp,
+        timestamp
+      );
+      database.prepare('INSERT INTO memory_fts (memory_id, project_id, title, content, summary, tags) VALUES (?, ?, ?, ?, ?, ?)').run(id, input.projectId, input.title, input.content, input.summary ?? '', tags);
+      return rowToMemory(database.prepare('SELECT * FROM memories WHERE id = ?').get(id) as Record<string, unknown>);
+    },
+
+    listMemories(input: MemoryListInput): MemoryListOutput {
+      const where = input.type ? 'project_id = ? AND status = ? AND type = ?' : 'project_id = ? AND status = ?';
+      const params = input.type ? [input.projectId, input.status, input.type] : [input.projectId, input.status];
+      const totalRow = database.prepare(`SELECT COUNT(*) AS total FROM memories WHERE ${where}`).get(...params) as { total: number };
+      const rows = database.prepare(`SELECT * FROM memories WHERE ${where} ORDER BY updated_at DESC LIMIT ? OFFSET ?`).all(...params, input.limit, input.offset) as Record<string, unknown>[];
+      return { total: Number(totalRow.total), items: rows.map(rowToMemory) };
+    },
+
+    archiveMemory(projectId: string, memoryId: string): MemoryRecord | null {
+      const timestamp = nowIso();
+      database.prepare("UPDATE memories SET status = 'archived', archived_at = ?, updated_at = ? WHERE id = ? AND project_id = ?").run(timestamp, timestamp, memoryId, projectId);
+      const row = database.prepare('SELECT * FROM memories WHERE id = ? AND project_id = ?').get(memoryId, projectId) as Record<string, unknown> | undefined;
+      return row ? rowToMemory(row) : null;
+    },
+
+    createHandoffNote(input: HandoffInsertInput): HandoffNoteRecord {
+      const id = createId('handoff');
+      const timestamp = nowIso();
+      database.prepare('INSERT INTO handoff_notes (id, project_id, task_title, changed_files, changed_modules, summary, verification, risks, next_steps, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+        id,
+        input.projectId,
+        input.taskTitle,
+        JSON.stringify(input.changedFiles),
+        JSON.stringify(input.changedModules),
+        input.summary,
+        input.verification,
+        input.risks,
+        input.nextSteps,
+        timestamp
+      );
+      return rowToHandoff(database.prepare('SELECT * FROM handoff_notes WHERE id = ?').get(id) as Record<string, unknown>);
+    },
+
+    listRecentHandoffs(projectId: string, limit: number): HandoffNoteRecord[] {
+      const rows = database.prepare('SELECT * FROM handoff_notes WHERE project_id = ? ORDER BY created_at DESC LIMIT ?').all(projectId, limit) as Record<string, unknown>[];
+      return rows.map(rowToHandoff);
+    },
+
+    searchMemories(input: { projectId: string; query: string; types?: MemoryType[]; limit: number }): MemoryRecord[] {
+      const terms = input.query.split(/\s+/).map((term) => term.trim()).filter((term) => term.length > 0);
+      const likeClauses = terms.map(() => '(memories.title LIKE ? OR memories.content LIKE ? OR memories.summary LIKE ? OR memories.tags LIKE ?)');
+      const likeParams = terms.flatMap((term) => {
+        const likeTerm = `%${term}%`;
+        return [likeTerm, likeTerm, likeTerm, likeTerm];
+      });
+      const typeClause = input.types && input.types.length > 0 ? ` AND type IN (${input.types.map(() => '?').join(',')})` : '';
+      const rows = database.prepare(`SELECT DISTINCT memories.* FROM memories WHERE memories.project_id = ? AND memories.status = 'active'${typeClause} AND (${likeClauses.join(' AND ')} OR memories.id IN (SELECT memory_id FROM memory_fts WHERE project_id = ? AND memory_fts MATCH ?)) ORDER BY memories.updated_at DESC LIMIT ?`).all(
+        input.projectId,
+        ...(input.types ?? []),
+        ...likeParams,
+        input.projectId,
+        input.query,
+        input.limit
+      ) as Record<string, unknown>[];
+      return rows.map(rowToMemory);
+    },
+
+    close(): void {
+      database.close();
+    }
+  };
+}

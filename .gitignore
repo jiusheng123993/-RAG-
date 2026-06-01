@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.local-project-memory/
+.memory-data/
+.superpowers/brainstorm/
+.codegraph/
+*.log
+.env
+.env.*
+!.env.example
