@@ -200,6 +200,8 @@ npm run build
 
 ### 阶段三：检索增强
 
+状态：待实现。
+
 目标：提升搜索质量和过滤能力。
 
 任务：
@@ -324,13 +326,13 @@ npm run test
 npm run build
 ```
 
-## 5. 当前建议先执行的第一模块
+## 5. 当前建议先执行的模块
 
-优先执行阶段一“知识库核心治理底座”。原因：
+阶段一“知识库核心治理底座”和阶段二“本地文档导入能力”已完成。下一步建议执行阶段三“检索增强”。原因：
 
-- 所有后续导入、检索、治理、诊断都依赖更完整的记忆 CRUD 和去重能力。
-- 该阶段主要沿现有 Memory Service / Storage Adapter / MCP Tool 扩展，风险低。
-- 完成后可以安全承接阶段二导入能力，避免导入后无法更新、无法查重、无法维护。
+- 当前已经能写入、更新、导入和查重，需要提升搜索过滤与结果质量。
+- 阶段三主要沿现有 Retrieval Service / Storage Adapter / MCP Tool 扩展，风险低。
+- 完成后可以安全承接阶段四治理报告，避免健康报告缺少检索和过滤基础。
 
 ## 6. 当前目标文件结构
 
@@ -358,6 +360,7 @@ E:\个人本地知识库\
 │   │   ├── tools.ts
 │   │   └── schemas.ts
 │   ├── services/
+│   │   ├── import-service.ts
 │   │   ├── memory-service.ts
 │   │   ├── project-resolver.ts
 │   │   └── retrieval-service.ts
@@ -365,11 +368,15 @@ E:\个人本地知识库\
 │   │   ├── migrations.ts
 │   │   ├── schema.ts
 │   │   └── sqlite-adapter.ts
+│   ├── importers/
+│   │   ├── document-parser.ts
+│   │   └── import-policy.ts
 │   ├── providers/
 │   │   ├── embedding-provider.ts
 │   │   ├── llm-provider.ts
 │   │   └── vector-store-provider.ts
 │   ├── types/
+│   │   ├── import.ts
 │   │   ├── memory.ts
 │   │   └── project.ts
 │   └── utils/
@@ -379,6 +386,9 @@ E:\个人本地知识库\
 │       └── time.ts
 └── tests/
     ├── basic.test.ts
+    ├── document-parser.test.ts
+    ├── import-policy.test.ts
+    ├── import-service.test.ts
     ├── memory-service.test.ts
     ├── mcp-tools.test.ts
     ├── project-resolver.test.ts

@@ -70,6 +70,8 @@
 
 ### 阶段二：本地文档导入能力
 
+状态：已完成。
+
 目标是把用户明确指定的本地 Markdown / 文本资料导入项目记忆库，形成真正可增长的本地知识库。
 
 实现能力：
@@ -89,9 +91,7 @@
 
 新增模块建议：
 
-- `src/importers/knowledge-importer.ts`
-- `src/importers/text-parser.ts`
-- `src/importers/markdown-parser.ts`
+- `src/importers/document-parser.ts`
 - `src/importers/import-policy.ts`
 - `src/services/import-service.ts`
 
@@ -111,6 +111,8 @@
 - 导入失败时返回安全、可理解的错误，不暴露系统敏感路径之外的内部细节。
 
 ### 阶段三：检索增强
+
+状态：待实现。
 
 目标是在 SQLite FTS5 + 中文 LIKE 兜底基础上增强搜索质量，同时为后续向量检索预留策略扩展。
 
