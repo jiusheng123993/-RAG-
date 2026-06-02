@@ -3,8 +3,12 @@ import type { createMemoryService } from '../services/memory-service.js';
 import type { createRetrievalService } from '../services/retrieval-service.js';
 import {
   archiveProjectMemorySchema,
+  bulkArchiveMemoriesSchema,
   detectDuplicateMemoriesSchema,
+  exportProjectMemorySchema,
+  findRelatedMemoriesSchema,
   getMemoryDetailSchema,
+  getMemoryHealthReportSchema,
   getProjectBriefSchema,
   knowledgeImportSchema,
   listImportBatchesSchema,
@@ -28,6 +32,9 @@ export function createToolHandlers(dependencies: ToolDependencies) {
     },
     async searchProjectMemory(input: unknown) {
       return dependencies.retrievalService.searchProjectMemory(searchProjectMemorySchema.parse(input));
+    },
+    async findRelatedMemories(input: unknown) {
+      return dependencies.retrievalService.findRelatedMemories(findRelatedMemoriesSchema.parse(input));
     },
     async previewKnowledgeImport(input: unknown) {
       return dependencies.importService.previewKnowledgeImport(knowledgeImportSchema.parse(input));
@@ -58,6 +65,15 @@ export function createToolHandlers(dependencies: ToolDependencies) {
     },
     async archiveProjectMemory(input: unknown) {
       return dependencies.memoryService.archiveProjectMemory(archiveProjectMemorySchema.parse(input));
+    },
+    async bulkArchiveMemories(input: unknown) {
+      return dependencies.memoryService.bulkArchiveMemories(bulkArchiveMemoriesSchema.parse(input));
+    },
+    async exportProjectMemory(input: unknown) {
+      return dependencies.memoryService.exportProjectMemory(exportProjectMemorySchema.parse(input));
+    },
+    async getMemoryHealthReport(input: unknown) {
+      return dependencies.memoryService.getMemoryHealthReport(getMemoryHealthReportSchema.parse(input));
     }
   };
 }

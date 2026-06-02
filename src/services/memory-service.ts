@@ -65,6 +65,27 @@ interface HandoffInput {
   nextSteps: string;
 }
 
+interface BulkArchiveInput {
+  workspacePath: string;
+  memoryIds?: string[];
+  olderThanDays?: number;
+  hasNoSummary?: boolean;
+  importanceBelow?: number;
+  reason: string;
+}
+
+interface ExportInput {
+  workspacePath: string;
+  format?: 'json' | 'markdown';
+  status?: 'active' | 'archived' | 'both';
+  types?: MemoryType[];
+  includeArchived?: boolean;
+}
+
+interface HealthReportInput {
+  workspacePath: string;
+}
+
 function assertText(value: string, name: string): void {
   if (value.trim().length === 0) {
     throw new Error(`${name} must not be empty`);
@@ -178,6 +199,134 @@ export function createMemoryService(adapter: SqliteAdapter, resolver: ProjectRes
       const memory = adapter.archiveMemory(project.id, input.memoryId);
       if (!memory) return { ok: false as const, error: 'memory_not_found' };
       return { ok: true as const, memoryId: memory.id, status: memory.status };
+    },
+
+    async bulkArchiveMemories(input: BulkArchiveInput) {
+      assertText(input.workspacePath, 'workspacePath');
+      assertText(input.reason, 'reason');
+      if (!input.memoryIds && !input.olderThanDays && !input.hasNoSummary && !input.importanceBelow) {
+        throw new Error('At least one of memoryIds, olderThanDays, hasNoSummary, or importanceBelow is required');
+      }
+      const resolved = await resolver.resolve(input.workspacePath);
+      const project = adapter.upsertProject(resolved);
+
+      let memoryIds = input.memoryIds ?? [];
+      if (!input.memoryIds && (input.olderThanDays || input.hasNoSummary || input.importanceBelow)) {
+        const matched = adapter.getMemoriesByConditions(project.id, {
+          olderThanDays: input.olderThanDays,
+          hasNoSummary: input.hasNoSummary,
+          importanceBelow: input.importanceBelow
+        });
+        memoryIds = matched.map(m => m.id);
+      }
+
+      const result = adapter.bulkArchiveMemories(project.id, memoryIds);
+      return { ok: true as const, ...result, total: memoryIds.length };
+    },
+
+    async exportProjectMemory(input: ExportInput) {
+      assertText(input.workspacePath, 'workspacePath');
+      const resolved = await resolver.resolve(input.workspacePath);
+      const project = adapter.upsertProject(resolved);
+
+      const status = input.status ?? 'active';
+      const includeArchived = input.includeArchived ?? false;
+
+      let memories: MemoryRecord[];
+      if (status === 'both' || includeArchived) {
+        memories = adapter.listMemories({ projectId: project.id, status: 'active', limit: 10000, offset: 0 }).items;
+        if (input.status === 'both' || input.includeArchived) {
+          const archived = adapter.listMemories({ projectId: project.id, status: 'archived', limit: 10000, offset: 0 }).items;
+          memories = [...memories, ...archived];
+        }
+      } else {
+        memories = adapter.listMemories({ projectId: project.id, status: status as MemoryStatus, limit: 10000, offset: 0 }).items;
+      }
+
+      if (input.types && input.types.length > 0) {
+        memories = memories.filter(m => input.types!.includes(m.type));
+      }
+
+      const format = input.format ?? 'json';
+
+      if (format === 'json') {
+        return {
+          ok: true as const,
+          format: 'json',
+          project: { id: project.id, name: project.name, workspacePath: project.workspacePath },
+          exportedAt: new Date().toISOString(),
+          totalCount: memories.length,
+          memories: memories.map(m => ({
+            id: m.id,
+            type: m.type,
+            title: m.title,
+            content: m.content,
+            summary: m.summary,
+            source: m.source,
+            tags: m.tags,
+            importance: m.importance,
+            status: m.status,
+            createdAt: m.createdAt,
+            updatedAt: m.updatedAt
+          }))
+        };
+      } else {
+        const lines = ['# ' + project.name + ' 项目记忆导出\n', `> 导出时间: ${new Date().toISOString()}\n`, `> 共 ${memories.length} 条记忆\n`, '---\n'];
+        for (const m of memories) {
+          lines.push(`## ${m.title} [${m.type}]${m.status === 'archived' ? ' (已归档)' : ''}\n`);
+          if (m.summary) lines.push(`> ${m.summary}\n`);
+          lines.push(`- 来源: ${m.source}\n`);
+          lines.push(`- 重要性: ${m.importance}/5\n`);
+          if (m.tags.length > 0) lines.push(`- 标签: ${m.tags.join(', ')}\n`);
+          lines.push(`- 更新时间: ${m.updatedAt}\n`);
+          lines.push('\n### 内容\n\n' + m.content + '\n\n---\n');
+        }
+        return {
+          ok: true as const,
+          format: 'markdown',
+          content: lines.join(''),
+          totalCount: memories.length
+        };
+      }
+    },
+
+    async getMemoryHealthReport(input: HealthReportInput) {
+      assertText(input.workspacePath, 'workspacePath');
+      const resolved = await resolver.resolve(input.workspacePath);
+      const project = adapter.upsertProject(resolved);
+      const stats = adapter.getMemoryStats(project.id);
+
+      const highPriorityTypes = ['do_not_touch', 'risk', 'decision', 'architecture'];
+      const highPriorityMemories = adapter.listMemories({ projectId: project.id, status: 'active', limit: 100, offset: 0 }).items.filter(m => highPriorityTypes.includes(m.type));
+
+      const risks: string[] = [];
+      if (stats.duplicateCount > 0) risks.push(`存在 ${stats.duplicateCount} 条重复记忆`);
+      if (stats.noSummaryCount > 0) risks.push(`${stats.noSummaryCount} 条记忆缺少摘要`);
+      if (stats.lowImportanceCount > 0) risks.push(`${stats.lowImportanceCount} 条低重要性记忆`);
+
+      return {
+        ok: true as const,
+        project: { id: project.id, name: project.name, workspacePath: project.workspacePath },
+        generatedAt: new Date().toISOString(),
+        stats: {
+          total: stats.total,
+          active: stats.active,
+          archived: stats.archived,
+          byType: stats.byType,
+          byTag: stats.byTag,
+          byImportance: stats.byImportance,
+          duplicateCount: stats.duplicateCount,
+          noSummaryCount: stats.noSummaryCount,
+          lowImportanceCount: stats.lowImportanceCount
+        },
+        highPriorityMemories: highPriorityMemories.map(m => ({
+          id: m.id,
+          type: m.type,
+          title: m.title,
+          importance: m.importance
+        })),
+        risks
+      };
     },
 
     async recordHandoffNote(input: HandoffInput) {

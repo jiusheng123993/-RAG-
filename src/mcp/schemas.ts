@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { memoryTypes } from '../types/memory.js';
+import { memoryStatuses, memoryTypes } from '../types/memory.js';
 
 export const rememberProjectContextSchema = z.object({
   workspacePath: z.string().min(1),
@@ -42,6 +42,19 @@ export const searchProjectMemorySchema = z.object({
   workspacePath: z.string().min(1),
   query: z.string().min(1),
   types: z.array(z.enum(memoryTypes)).optional(),
+  tags: z.array(z.string()).optional(),
+  source: z.string().optional(),
+  status: z.enum(memoryStatuses).optional(),
+  minImportance: z.number().int().min(1).max(5).optional(),
+  updatedAfter: z.string().optional(),
+  updatedBefore: z.string().optional(),
+  includeArchived: z.boolean().optional(),
+  limit: z.number().int().min(1).max(50).optional()
+});
+
+export const findRelatedMemoriesSchema = z.object({
+  workspacePath: z.string().min(1),
+  memoryId: z.string().min(1),
   limit: z.number().int().min(1).max(50).optional()
 });
 
@@ -89,4 +102,25 @@ export const archiveProjectMemorySchema = z.object({
   workspacePath: z.string().min(1),
   memoryId: z.string().min(1),
   reason: z.string().min(1)
+});
+
+export const bulkArchiveMemoriesSchema = z.object({
+  workspacePath: z.string().min(1),
+  memoryIds: z.array(z.string().min(1)).optional(),
+  olderThanDays: z.number().int().min(1).optional(),
+  hasNoSummary: z.boolean().optional(),
+  importanceBelow: z.number().int().min(1).max(5).optional(),
+  reason: z.string().min(1)
+});
+
+export const exportProjectMemorySchema = z.object({
+  workspacePath: z.string().min(1),
+  format: z.enum(['json', 'markdown']).optional(),
+  status: z.enum(['active', 'archived', 'both']).optional(),
+  types: z.array(z.enum(memoryTypes)).optional(),
+  includeArchived: z.boolean().optional()
+});
+
+export const getMemoryHealthReportSchema = z.object({
+  workspacePath: z.string().min(1)
 });

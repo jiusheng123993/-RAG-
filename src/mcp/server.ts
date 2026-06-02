@@ -9,7 +9,7 @@ import { createRetrievalService } from '../services/retrieval-service.js';
 import { createSqliteAdapter } from '../storage/sqlite-adapter.js';
 import { createToolHandlers } from './tools.js';
 
-const toolDefinitions = [
+export const toolDefinitions = [
   {
     name: 'remember_project_context',
     description: '写入当前工作区的长期项目记忆。',
@@ -38,9 +38,29 @@ const toolDefinitions = [
         workspacePath: { type: 'string' },
         query: { type: 'string' },
         types: { type: 'array', items: { type: 'string' } },
+        tags: { type: 'array', items: { type: 'string' } },
+        source: { type: 'string' },
+        status: { type: 'string' },
+        minImportance: { type: 'number' },
+        updatedAfter: { type: 'string' },
+        updatedBefore: { type: 'string' },
+        includeArchived: { type: 'boolean' },
         limit: { type: 'number' }
       },
       required: ['workspacePath', 'query']
+    }
+  },
+  {
+    name: 'find_related_memories',
+    description: '基于标签、来源和关键词查找当前工作区内与指定记忆相关的 active 记忆。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workspacePath: { type: 'string' },
+        memoryId: { type: 'string' },
+        limit: { type: 'number' }
+      },
+      required: ['workspacePath', 'memoryId']
     }
   },
   {
@@ -192,6 +212,48 @@ const toolDefinitions = [
       },
       required: ['workspacePath', 'memoryId', 'reason']
     }
+  },
+  {
+    name: 'bulk_archive_memories',
+    description: '批量归档项目记忆，支持手动指定或按条件自动筛选。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workspacePath: { type: 'string' },
+        memoryIds: { type: 'array', items: { type: 'string' } },
+        olderThanDays: { type: 'number' },
+        hasNoSummary: { type: 'boolean' },
+        importanceBelow: { type: 'number' },
+        reason: { type: 'string' }
+      },
+      required: ['workspacePath', 'reason']
+    }
+  },
+  {
+    name: 'export_project_memory',
+    description: '导出项目记忆为 JSON 或 Markdown 格式。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workspacePath: { type: 'string' },
+        format: { type: 'string', enum: ['json', 'markdown'] },
+        status: { type: 'string', enum: ['active', 'archived', 'both'] },
+        types: { type: 'array', items: { type: 'string' } },
+        includeArchived: { type: 'boolean' }
+      },
+      required: ['workspacePath']
+    }
+  },
+  {
+    name: 'get_memory_health_report',
+    description: '生成知识库健康报告，包含统计信息、风险提示和高优先级记忆。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workspacePath: { type: 'string' }
+      },
+      required: ['workspacePath']
+    }
   }
 ];
 
@@ -216,6 +278,7 @@ export async function startMcpServer(): Promise<void> {
     const result = await (async () => {
       if (name === 'remember_project_context') return handlers.rememberProjectContext(args);
       if (name === 'search_project_memory') return handlers.searchProjectMemory(args);
+      if (name === 'find_related_memories') return handlers.findRelatedMemories(args);
       if (name === 'preview_knowledge_import') return handlers.previewKnowledgeImport(args);
       if (name === 'import_knowledge_files') return handlers.importKnowledgeFiles(args);
       if (name === 'list_import_batches') return handlers.listImportBatches(args);
@@ -226,6 +289,9 @@ export async function startMcpServer(): Promise<void> {
       if (name === 'record_handoff_note') return handlers.recordHandoffNote(args);
       if (name === 'list_project_memories') return handlers.listProjectMemories(args);
       if (name === 'archive_project_memory') return handlers.archiveProjectMemory(args);
+      if (name === 'bulk_archive_memories') return handlers.bulkArchiveMemories(args);
+      if (name === 'export_project_memory') return handlers.exportProjectMemory(args);
+      if (name === 'get_memory_health_report') return handlers.getMemoryHealthReport(args);
       throw new Error(`Unknown tool: ${name}`);
     })();
 

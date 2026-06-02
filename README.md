@@ -41,8 +41,8 @@
 
 1. 知识库核心治理底座：已完成记忆详情、更新、内容 hash、来源路径、重复检测。
 2. 本地文档导入能力：已完成显式导入 Markdown / 文本文件或目录，支持 dry-run、跳过敏感路径和导入批次。
-3. 检索增强：待实现标签、来源、状态、时间、重要级别过滤，以及结果裁剪和排序增强。
-4. 知识维护与治理工具：批量归档、导出、知识库健康报告。
+3. 检索增强：已完成标签、来源、状态、时间、重要级别过滤，支持归档显式检索、结果裁剪、命中字段标记和相关记忆查询。
+4. 知识维护与治理工具（进行中）：批量归档、导出、知识库健康报告。
 5. 接入体验与诊断：本地 doctor、迁移状态、MCP 工具和数据库健康检查。
 
 详细规格见：
@@ -113,12 +113,13 @@ LOCAL_PROJECT_MEMORY_HOME=E:\个人本地知识库\.memory-data
 
 ## MCP 工具
 
-当前已实现 12 个工具：
+当前已实现 16 个工具：
 
 | 工具 | 作用 |
 |---|---|
 | `remember_project_context` | 写入项目背景、架构约定、模块边界、风险、规则等长期记忆 |
-| `search_project_memory` | 搜索当前项目内的 active 记忆 |
+| `search_project_memory` | 搜索当前项目内记忆，支持类型、标签、来源、状态、重要级别、时间范围和归档显式过滤 |
+| `find_related_memories` | 基于标签、来源和关键词查找相关 active 记忆 |
 | `get_memory_detail` | 读取当前项目内单条记忆详情 |
 | `update_project_memory` | 更新当前项目内单条记忆 |
 | `detect_duplicate_memories` | 按内容或记忆 ID 检测当前项目内重复 active 记忆 |
@@ -129,13 +130,14 @@ LOCAL_PROJECT_MEMORY_HOME=E:\个人本地知识库\.memory-data
 | `record_handoff_note` | 记录任务完成后的交接信息 |
 | `list_project_memories` | 分页列出项目记忆 |
 | `archive_project_memory` | 归档过期项目记忆 |
+| `bulk_archive_memories` | 批量归档项目记忆，支持手动指定或按条件自动筛选 |
+| `export_project_memory` | 导出项目记忆为 JSON 或 Markdown 格式 |
+| `get_memory_health_report` | 生成知识库健康报告，包含统计信息、风险提示和高优先级记忆 |
 
 后续规划工具按阶段引入，未实现前不要在 Trae 配置或工作流中假设可用。
 
 | 阶段 | 规划工具 |
 |---|---|
-| 检索增强 | `find_related_memories` |
-| 知识维护与治理 | `bulk_archive_memories`、`export_project_memory`、`get_memory_health_report` |
 | 接入体验与诊断 | `get_service_diagnostics` |
 
 ## 安全边界

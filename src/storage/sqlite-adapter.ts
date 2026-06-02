@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import type { SQLInputValue } from 'node:sqlite';
 import path from 'node:path';
 import type { ImportBatchRecord, ImportBatchStatus, ImportItemRecord, ImportItemStatus } from '../types/import.js';
 import type { HandoffNoteRecord, MemoryRecord, MemoryStatus, MemoryType } from '../types/memory.js';
@@ -39,6 +40,20 @@ interface MemoryListInput {
   type?: MemoryType;
   limit: number;
   offset: number;
+}
+
+interface MemorySearchInput {
+  projectId: string;
+  query: string;
+  types?: MemoryType[];
+  tags?: string[];
+  source?: string;
+  status?: MemoryStatus;
+  minImportance?: number;
+  updatedAfter?: string;
+  updatedBefore?: string;
+  includeArchived?: boolean;
+  limit: number;
 }
 
 interface HandoffInsertInput {
@@ -82,6 +97,24 @@ interface MemoryListOutput {
   total: number;
 }
 
+interface MemoryStats {
+  total: number;
+  active: number;
+  archived: number;
+  byType: Record<string, number>;
+  byTag: Record<string, number>;
+  byImportance: Record<number, number>;
+  duplicateCount: number;
+  noSummaryCount: number;
+  lowImportanceCount: number;
+}
+
+interface MemoryConditions {
+  olderThanDays?: number;
+  hasNoSummary?: boolean;
+  importanceBelow?: number;
+}
+
 export interface SqliteAdapter {
   initialize(): void;
   upsertProject(input: ResolvedProjectInput): ProjectIdentity;
@@ -91,12 +124,15 @@ export interface SqliteAdapter {
   findDuplicateMemories(projectId: string, contentHash: string, limit: number): MemoryRecord[];
   listMemories(input: MemoryListInput): MemoryListOutput;
   archiveMemory(projectId: string, memoryId: string): MemoryRecord | null;
+  bulkArchiveMemories(projectId: string, memoryIds: string[]): { success: number; failed: number };
+  getMemoriesByConditions(projectId: string, conditions: MemoryConditions): MemoryRecord[];
+  getMemoryStats(projectId: string): MemoryStats;
   createHandoffNote(input: HandoffInsertInput): HandoffNoteRecord;
   listRecentHandoffs(projectId: string, limit: number): HandoffNoteRecord[];
   createImportBatch(input: ImportBatchInsertInput): ImportBatchRecord;
   createImportItem(input: ImportItemInsertInput): ImportItemRecord;
   listImportBatches(projectId: string, limit: number, offset: number): ImportBatchListOutput;
-  searchMemories(input: { projectId: string; query: string; types?: MemoryType[]; limit: number }): MemoryRecord[];
+  searchMemories(input: MemorySearchInput): MemoryRecord[];
   close(): void;
 }
 
@@ -199,6 +235,10 @@ export function createSqliteAdapter(databasePath: string): SqliteAdapter {
       database.exec('PRAGMA foreign_keys = ON');
       for (const migration of migrations) {
         database.exec(migration);
+        if (migration.startsWith('CREATE TABLE IF NOT EXISTS memories')) {
+          addColumnIfMissing(database, 'memories', 'source_path', 'TEXT');
+          addColumnIfMissing(database, 'memories', 'content_hash', 'TEXT');
+        }
       }
       addColumnIfMissing(database, 'memories', 'source_path', 'TEXT');
       addColumnIfMissing(database, 'memories', 'content_hash', 'TEXT');
@@ -320,6 +360,81 @@ export function createSqliteAdapter(databasePath: string): SqliteAdapter {
       return row ? rowToMemory(row) : null;
     },
 
+    bulkArchiveMemories(projectId: string, memoryIds: string[]): { success: number; failed: number } {
+      const timestamp = nowIso();
+      let success = 0;
+      let failed = 0;
+      for (const memoryId of memoryIds) {
+        const result = database.prepare("UPDATE memories SET status = 'archived', archived_at = ?, updated_at = ? WHERE id = ? AND project_id = ? AND status = 'active'").run(timestamp, timestamp, memoryId, projectId);
+        if (result.changes > 0) success++;
+        else failed++;
+      }
+      return { success, failed };
+    },
+
+    getMemoriesByConditions(projectId: string, conditions: MemoryConditions): MemoryRecord[] {
+      const where = ["project_id = ?", "status = 'active'"];
+      const params: SQLInputValue[] = [projectId];
+
+      if (conditions.olderThanDays) {
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - conditions.olderThanDays);
+        where.push('updated_at < ?');
+        params.push(cutoffDate.toISOString());
+      }
+      if (conditions.hasNoSummary) {
+        where.push("(summary IS NULL OR summary = '')");
+      }
+      if (conditions.importanceBelow) {
+        where.push('importance < ?');
+        params.push(conditions.importanceBelow);
+      }
+
+      const rows = database.prepare(`SELECT * FROM memories WHERE ${where.join(' AND ')} ORDER BY updated_at DESC`).all(...params) as Record<string, unknown>[];
+      return rows.map(rowToMemory);
+    },
+
+    getMemoryStats(projectId: string): MemoryStats {
+      const totalRow = database.prepare('SELECT COUNT(*) as total FROM memories WHERE project_id = ?').get(projectId) as { total: number };
+      const activeRow = database.prepare("SELECT COUNT(*) as total FROM memories WHERE project_id = ? AND status = 'active'").get(projectId) as { total: number };
+      const archivedRow = database.prepare("SELECT COUNT(*) as total FROM memories WHERE project_id = ? AND status = 'archived'").get(projectId) as { total: number };
+
+      const typeRows = database.prepare("SELECT type, COUNT(*) as count FROM memories WHERE project_id = ? GROUP BY type").all(projectId) as Array<{ type: string; count: number }>;
+      const byType: Record<string, number> = {};
+      for (const row of typeRows) byType[row.type] = row.count;
+
+      const tagRows = database.prepare("SELECT tags FROM memories WHERE project_id = ?").all(projectId) as Array<{ tags: string }>;
+      const tagCounts: Record<string, number> = {};
+      for (const row of tagRows) {
+        const tags = JSON.parse(row.tags) as string[];
+        for (const tag of tags) {
+          tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+        }
+      }
+
+      const importanceRows = database.prepare("SELECT importance, COUNT(*) as count FROM memories WHERE project_id = ? GROUP BY importance").all(projectId) as Array<{ importance: number; count: number }>;
+      const byImportance: Record<number, number> = {};
+      for (const row of importanceRows) byImportance[row.importance] = row.count;
+
+      const noSummaryRow = database.prepare("SELECT COUNT(*) as total FROM memories WHERE project_id = ? AND (summary IS NULL OR summary = '') AND status = 'active'").get(projectId) as { total: number };
+      const lowImportanceRow = database.prepare("SELECT COUNT(*) as total FROM memories WHERE project_id = ? AND importance <= 2 AND status = 'active'").get(projectId) as { total: number };
+
+      const hashRows = database.prepare("SELECT content_hash, COUNT(*) as cnt FROM memories WHERE project_id = ? AND status = 'active' GROUP BY content_hash HAVING cnt > 1").all(projectId) as Array<{ content_hash: string; cnt: number }>;
+      const duplicateCount = hashRows.reduce((sum, row) => sum + row.cnt - 1, 0);
+
+      return {
+        total: Number(totalRow.total),
+        active: Number(activeRow.total),
+        archived: Number(archivedRow.total),
+        byType,
+        byTag: tagCounts,
+        byImportance,
+        duplicateCount,
+        noSummaryCount: Number(noSummaryRow.total),
+        lowImportanceCount: Number(lowImportanceRow.total)
+      };
+    },
+
     createHandoffNote(input: HandoffInsertInput): HandoffNoteRecord {
       const id = createId('handoff');
       const timestamp = nowIso();
@@ -383,22 +498,53 @@ export function createSqliteAdapter(databasePath: string): SqliteAdapter {
       return { total: Number(totalRow.total), items: rows.map(rowToImportBatch) };
     },
 
-    searchMemories(input: { projectId: string; query: string; types?: MemoryType[]; limit: number }): MemoryRecord[] {
+    searchMemories(input: MemorySearchInput): MemoryRecord[] {
       const terms = input.query.split(/\s+/).map((term) => term.trim()).filter((term) => term.length > 0);
-      const likeClauses = terms.map(() => '(memories.title LIKE ? OR memories.content LIKE ? OR memories.summary LIKE ? OR memories.tags LIKE ? OR memories.source_path LIKE ?)');
-      const likeParams = terms.flatMap((term) => {
-        const likeTerm = `%${term}%`;
-        return [likeTerm, likeTerm, likeTerm, likeTerm, likeTerm];
-      });
-      const typeClause = input.types && input.types.length > 0 ? ` AND type IN (${input.types.map(() => '?').join(',')})` : '';
-      const rows = database.prepare(`SELECT DISTINCT memories.* FROM memories WHERE memories.project_id = ? AND memories.status = 'active'${typeClause} AND (${likeClauses.join(' AND ')} OR memories.id IN (SELECT memory_id FROM memory_fts WHERE project_id = ? AND memory_fts MATCH ?)) ORDER BY memories.updated_at DESC LIMIT ?`).all(
-        input.projectId,
-        ...(input.types ?? []),
-        ...likeParams,
-        input.projectId,
-        input.query,
-        input.limit
-      ) as Record<string, unknown>[];
+      const params: SQLInputValue[] = [input.projectId];
+      const where = ['memories.project_id = ?'];
+      if (!input.includeArchived) {
+        where.push(input.status ? 'memories.status = ?' : "memories.status = 'active'");
+        if (input.status) params.push(input.status);
+      } else if (input.status) {
+        where.push('memories.status = ?');
+        params.push(input.status);
+      }
+      if (input.types && input.types.length > 0) {
+        where.push(`memories.type IN (${input.types.map(() => '?').join(',')})`);
+        params.push(...input.types);
+      }
+      if (input.source) {
+        where.push('memories.source = ?');
+        params.push(input.source);
+      }
+      if (input.minImportance !== undefined) {
+        where.push('memories.importance >= ?');
+        params.push(input.minImportance);
+      }
+      if (input.updatedAfter) {
+        where.push('memories.updated_at >= ?');
+        params.push(input.updatedAfter);
+      }
+      if (input.updatedBefore) {
+        where.push('memories.updated_at <= ?');
+        params.push(input.updatedBefore);
+      }
+      if (input.tags && input.tags.length > 0) {
+        for (const tag of input.tags) {
+          where.push('memories.tags LIKE ?');
+          params.push(`%"${tag}"%`);
+        }
+      }
+      if (terms.length > 0) {
+        const likeClauses = terms.map(() => '(memories.title LIKE ? OR memories.content LIKE ? OR memories.summary LIKE ? OR memories.tags LIKE ? OR memories.source LIKE ? OR memories.source_path LIKE ?)');
+        const likeParams = terms.flatMap((term) => {
+          const likeTerm = `%${term}%`;
+          return [likeTerm, likeTerm, likeTerm, likeTerm, likeTerm, likeTerm];
+        });
+        where.push(`(${likeClauses.join(' AND ')} OR memories.id IN (SELECT memory_id FROM memory_fts WHERE project_id = ? AND memory_fts MATCH ?))`);
+        params.push(...likeParams, input.projectId, input.query);
+      }
+      const rows = database.prepare(`SELECT DISTINCT memories.* FROM memories WHERE ${where.join(' AND ')} ORDER BY memories.importance DESC, memories.updated_at DESC LIMIT ?`).all(...params, input.limit) as Record<string, unknown>[];
       return rows.map(rowToMemory);
     },
 
