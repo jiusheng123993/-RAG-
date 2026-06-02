@@ -19,7 +19,7 @@ export function createServerProcessCommand(input: ServerProcessCommandInput): Se
     : path.join(input.cwd, 'dist/server/index.js');
 
   const nodePath = process.platform === 'win32'
-    ? 'C:\\Program Files\\nodejs\\node.exe'
+    ? 'C:/Program Files/nodejs/node.exe'
     : 'node';
 
   return {
