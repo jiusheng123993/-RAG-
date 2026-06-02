@@ -1,4 +1,4 @@
-﻿export const memoryTypes = [
+export const memoryTypes = [
   'project_overview',
   'architecture',
   'module_boundary',
@@ -10,7 +10,9 @@
   'known_issue',
   'do_not_touch',
   'extension_point',
-  'command'
+  'command',
+  'knowledge',
+  'document'
 ] as const;
 
 export type MemoryType = (typeof memoryTypes)[number];
@@ -27,6 +29,8 @@ export interface MemoryRecord {
   content: string;
   summary: string | null;
   source: string;
+  sourcePath: string | null;
+  contentHash: string | null;
   tags: string[];
   status: MemoryStatus;
   importance: number;

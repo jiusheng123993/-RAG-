@@ -22,7 +22,8 @@ const toolDefinitions = [
         summary: { type: 'string' },
         tags: { type: 'array', items: { type: 'string' } },
         importance: { type: 'number' },
-        source: { type: 'string' }
+        source: { type: 'string' },
+        sourcePath: { type: 'string' }
       },
       required: ['workspacePath', 'type', 'title', 'content']
     }
@@ -39,6 +40,52 @@ const toolDefinitions = [
         limit: { type: 'number' }
       },
       required: ['workspacePath', 'query']
+    }
+  },
+  {
+    name: 'get_memory_detail',
+    description: '读取当前工作区内单条项目记忆详情。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workspacePath: { type: 'string' },
+        memoryId: { type: 'string' }
+      },
+      required: ['workspacePath', 'memoryId']
+    }
+  },
+  {
+    name: 'update_project_memory',
+    description: '更新当前工作区内单条项目记忆。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workspacePath: { type: 'string' },
+        memoryId: { type: 'string' },
+        type: { type: 'string' },
+        title: { type: 'string' },
+        content: { type: 'string' },
+        summary: { type: 'string' },
+        tags: { type: 'array', items: { type: 'string' } },
+        importance: { type: 'number' },
+        source: { type: 'string' },
+        sourcePath: { type: 'string' }
+      },
+      required: ['workspacePath', 'memoryId']
+    }
+  },
+  {
+    name: 'detect_duplicate_memories',
+    description: '按内容或记忆 ID 检测当前工作区内的重复 active 记忆。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workspacePath: { type: 'string' },
+        memoryId: { type: 'string' },
+        content: { type: 'string' },
+        limit: { type: 'number' }
+      },
+      required: ['workspacePath']
     }
   },
   {
@@ -122,6 +169,9 @@ export async function startMcpServer(): Promise<void> {
     const result = await (async () => {
       if (name === 'remember_project_context') return handlers.rememberProjectContext(args);
       if (name === 'search_project_memory') return handlers.searchProjectMemory(args);
+      if (name === 'get_memory_detail') return handlers.getMemoryDetail(args);
+      if (name === 'update_project_memory') return handlers.updateProjectMemory(args);
+      if (name === 'detect_duplicate_memories') return handlers.detectDuplicateMemories(args);
       if (name === 'get_project_brief') return handlers.getProjectBrief(args);
       if (name === 'record_handoff_note') return handlers.recordHandoffNote(args);
       if (name === 'list_project_memories') return handlers.listProjectMemories(args);

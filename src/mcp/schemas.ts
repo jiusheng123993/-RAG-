@@ -1,4 +1,4 @@
-﻿import { z } from 'zod';
+import { z } from 'zod';
 import { memoryTypes } from '../types/memory.js';
 
 export const rememberProjectContextSchema = z.object({
@@ -9,7 +9,33 @@ export const rememberProjectContextSchema = z.object({
   summary: z.string().nullable().optional(),
   tags: z.array(z.string()).optional(),
   importance: z.number().int().min(1).max(5).optional(),
-  source: z.string().optional()
+  source: z.string().optional(),
+  sourcePath: z.string().nullable().optional()
+});
+
+export const getMemoryDetailSchema = z.object({
+  workspacePath: z.string().min(1),
+  memoryId: z.string().min(1)
+});
+
+export const updateProjectMemorySchema = z.object({
+  workspacePath: z.string().min(1),
+  memoryId: z.string().min(1),
+  type: z.enum(memoryTypes).optional(),
+  title: z.string().min(1).optional(),
+  content: z.string().min(1).optional(),
+  summary: z.string().nullable().optional(),
+  tags: z.array(z.string()).optional(),
+  importance: z.number().int().min(1).max(5).optional(),
+  source: z.string().optional(),
+  sourcePath: z.string().nullable().optional()
+});
+
+export const detectDuplicateMemoriesSchema = z.object({
+  workspacePath: z.string().min(1),
+  memoryId: z.string().min(1).optional(),
+  content: z.string().min(1).optional(),
+  limit: z.number().int().min(1).max(100).optional()
 });
 
 export const searchProjectMemorySchema = z.object({
