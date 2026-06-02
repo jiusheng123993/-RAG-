@@ -33,7 +33,12 @@ describe('visual app server', () => {
 
     try {
       const response = await fetch(`http://127.0.0.1:${address.port}/api/diagnostics`);
-      const body = await response.json() as { status: string; database: string; stats: { memories: number; projects: number; users: number } };
+      const body = await response.json() as {
+        status: string;
+        database: string;
+        stats: { memories: number; projects: number; users: number };
+        mcp: { tools: number; toolDefinitions: Array<{ name: string; description: string; required: string[] }> };
+      };
 
       expect(response.status).toBe(200);
       expect(body.status).toBe('running');
@@ -41,6 +46,12 @@ describe('visual app server', () => {
       expect(body.stats.memories).toBeGreaterThanOrEqual(0);
       expect(body.stats.projects).toBeGreaterThanOrEqual(0);
       expect(body.stats.users).toBeGreaterThanOrEqual(0);
+      expect(body.mcp.toolDefinitions.length).toBe(body.mcp.tools);
+      expect(body.mcp.toolDefinitions).toContainEqual({
+        name: 'remember_project_context',
+        description: '写入当前工作区的长期项目记忆。',
+        required: ['workspacePath', 'type', 'title', 'content']
+      });
     } finally {
       server.close();
     }

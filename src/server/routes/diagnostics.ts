@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { toolDefinitions } from '../../mcp/server.js';
 import { query } from '../db/postgres-adapter.js';
 
 const router = Router();
@@ -26,7 +27,12 @@ router.get('/', async (_req, res) => {
     },
     mcp: {
       enabled: true,
-      tools: 17
+      tools: toolDefinitions.length,
+      toolDefinitions: toolDefinitions.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        required: tool.inputSchema.required ?? []
+      }))
     }
   });
 });

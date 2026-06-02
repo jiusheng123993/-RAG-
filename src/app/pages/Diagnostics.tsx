@@ -2,12 +2,18 @@ import { Activity, Database, Server, Wrench } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { apiRequest } from '../api.js';
 
+interface ToolDefinition {
+  name: string;
+  description: string;
+  required: string[];
+}
+
 interface DiagnosticsData {
   version: string;
   status: string;
   database: string;
   stats: { memories: number; projects: number; users: number };
-  mcp: { enabled: boolean; tools: number };
+  mcp: { enabled: boolean; tools: number; toolDefinitions: ToolDefinition[] };
 }
 
 export default function Diagnostics() {
@@ -52,6 +58,29 @@ export default function Diagnostics() {
           <p>项目数: {diagnostics?.stats.projects ?? 0}</p>
           <p>记忆数: {diagnostics?.stats.memories ?? 0}</p>
           <p>用户数: {diagnostics?.stats.users ?? 0}</p>
+        </div>
+      </div>
+      <div className="mt-6 rounded-lg bg-white p-6 shadow">
+        <h2 className="mb-4 text-lg font-semibold">MCP 工具清单</h2>
+        <div className="grid grid-cols-1 gap-3">
+          {(diagnostics?.mcp.toolDefinitions ?? []).map((tool) => (
+            <div key={tool.name} className="rounded border border-gray-200 p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="font-mono text-sm font-semibold text-gray-900">{tool.name}</h3>
+                  <p className="mt-1 text-sm text-gray-600">{tool.description}</p>
+                </div>
+                <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600">{tool.required.length} 必填</span>
+              </div>
+              {tool.required.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {tool.required.map((field) => (
+                    <span key={field} className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700">{field}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </div>
     </div>
