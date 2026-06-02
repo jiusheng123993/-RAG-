@@ -1,5 +1,6 @@
 import os from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { sha256 } from '../src/utils/hash.js';
 import { createSqliteAdapter } from '../src/storage/sqlite-adapter.js';
@@ -91,6 +92,30 @@ describe('sqlite adapter', () => {
     expect(detail?.sourcePath).toBe('docs/new.md');
     expect(results).toHaveLength(1);
     expect(results[0]?.id).toBe(memory.id);
+    adapter.close();
+  });
+
+  it('兼容旧数据库先补记忆表新增列再创建相关索引', () => {
+    const dbPath = databasePath('legacy-migration');
+    const database = new DatabaseSync(dbPath);
+    database.exec(`CREATE TABLE memories (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      summary TEXT,
+      source TEXT NOT NULL,
+      tags TEXT NOT NULL,
+      status TEXT NOT NULL,
+      importance INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      archived_at TEXT
+    )`);
+    database.close();
+    const adapter = createSqliteAdapter(dbPath);
+    expect(() => adapter.initialize()).not.toThrow();
     adapter.close();
   });
 

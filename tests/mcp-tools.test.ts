@@ -71,6 +71,20 @@ describe('mcp tool handlers', () => {
     adapter.close();
   });
 
+  it('通过 handler 使用增强检索和相关记忆查询', async () => {
+    const { adapter, handlers } = createHandlers();
+    const source = await handlers.rememberProjectContext({ workspacePath: 'E:/demo', type: 'architecture', title: '检索架构', content: '检索服务负责排序', source: 'spec', tags: ['retrieval'], importance: 5 });
+    await handlers.rememberProjectContext({ workspacePath: 'E:/demo', type: 'decision', title: '检索排序决策', content: '相关记忆应优先匹配标签', source: 'spec', tags: ['retrieval', 'ranking'], importance: 4 });
+    await handlers.rememberProjectContext({ workspacePath: 'E:/demo', type: 'risk', title: '无关风险', content: '数据库迁移风险', source: 'note', tags: ['database'], importance: 4 });
+    const searched = await handlers.searchProjectMemory({ workspacePath: 'E:/demo', query: '检索', tags: ['retrieval'], source: 'spec', minImportance: 4, limit: 10 });
+    const related = await handlers.findRelatedMemories({ workspacePath: 'E:/demo', memoryId: source.memoryId, limit: 10 });
+    expect(searched.results).toHaveLength(2);
+    expect(searched.results[0]?.matchedFields).toContain('tags');
+    expect(related.ok).toBe(true);
+    expect(related.results).toHaveLength(1);
+    adapter.close();
+  });
+
   it('拒绝非法参数', async () => {
     const { adapter, handlers } = createHandlers();
     await expect(handlers.rememberProjectContext({ workspacePath: 'E:/demo', type: 'unknown', title: 'x', content: 'x' })).rejects.toThrow();

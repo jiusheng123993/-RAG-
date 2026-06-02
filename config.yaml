@@ -1,0 +1,20 @@
+database:
+  host: localhost
+  port: 5432
+  username: postgres
+  password: postgres
+  name: local_project_memory
+
+app:
+  host: 0.0.0.0
+  port: 3000
+  jwtSecret: dev-secret-change-in-production
+  corsOrigins:
+    - http://localhost:5173
+    - http://localhost:3000
+    - electron://localhost
+
+mcp:
+  enabled: true
+  transport: http
+  port: 3001

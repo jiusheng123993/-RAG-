@@ -147,7 +147,8 @@ archive_project_memory
 | 工具 | 使用场景 |
 |---|---|
 | `remember_project_context` | 写入长期项目记忆 |
-| `search_project_memory` | 搜索当前项目记忆 |
+| `search_project_memory` | 搜索当前项目记忆，支持类型、标签、来源、状态、重要级别、时间范围和归档显式过滤 |
+| `find_related_memories` | 基于标签、来源和关键词查找相关 active 记忆 |
 | `get_memory_detail` | 查看单条记忆详情 |
 | `update_project_memory` | 更新单条项目记忆 |
 | `detect_duplicate_memories` | 检测当前项目内重复记忆 |
@@ -163,7 +164,6 @@ archive_project_memory
 
 | 阶段 | 规划工具 | 使用场景 |
 |---|---|---|
-| 检索增强 | `find_related_memories` | 查找相关记忆 |
 | 知识维护与治理 | `bulk_archive_memories`、`export_project_memory`、`get_memory_health_report` | 批量归档、导出、健康报告 |
 | 接入体验与诊断 | `get_service_diagnostics` | 检查服务、数据库和工具状态 |
 
