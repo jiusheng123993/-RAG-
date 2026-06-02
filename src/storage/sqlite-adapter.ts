@@ -127,6 +127,9 @@ export interface SqliteAdapter {
   bulkArchiveMemories(projectId: string, memoryIds: string[]): { success: number; failed: number };
   getMemoriesByConditions(projectId: string, conditions: MemoryConditions): MemoryRecord[];
   getMemoryStats(projectId: string): MemoryStats;
+  checkDatabaseHealth(): { ok: boolean; error?: string };
+  checkFts5Available(): boolean;
+  getTableInfo(): { memories: number; projects: number; handoffs: number; importBatches: number };
   createHandoffNote(input: HandoffInsertInput): HandoffNoteRecord;
   listRecentHandoffs(projectId: string, limit: number): HandoffNoteRecord[];
   createImportBatch(input: ImportBatchInsertInput): ImportBatchRecord;
@@ -432,6 +435,37 @@ export function createSqliteAdapter(databasePath: string): SqliteAdapter {
         duplicateCount,
         noSummaryCount: Number(noSummaryRow.total),
         lowImportanceCount: Number(lowImportanceRow.total)
+      };
+    },
+
+    checkDatabaseHealth(): { ok: boolean; error?: string } {
+      try {
+        database.prepare('SELECT 1').get();
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : 'unknown' };
+      }
+    },
+
+    checkFts5Available(): boolean {
+      try {
+        database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='memory_fts'").get();
+        return true;
+      } catch {
+        return false;
+      }
+    },
+
+    getTableInfo() {
+      const memories = database.prepare('SELECT COUNT(*) as count FROM memories').get() as { count: number };
+      const projects = database.prepare('SELECT COUNT(*) as count FROM projects').get() as { count: number };
+      const handoffs = database.prepare('SELECT COUNT(*) as count FROM handoff_notes').get() as { count: number };
+      const importBatches = database.prepare('SELECT COUNT(*) as count FROM import_batches').get() as { count: number };
+      return {
+        memories: Number(memories.count),
+        projects: Number(projects.count),
+        handoffs: Number(handoffs.count),
+        importBatches: Number(importBatches.count)
       };
     },
 

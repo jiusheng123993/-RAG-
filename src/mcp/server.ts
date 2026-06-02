@@ -254,6 +254,16 @@ export const toolDefinitions = [
       },
       required: ['workspacePath']
     }
+  },
+  {
+    name: 'get_service_diagnostics',
+    description: '检查服务、数据库和工具状态，返回诊断信息。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workspacePath: { type: 'string' }
+      }
+    }
   }
 ];
 
@@ -292,6 +302,7 @@ export async function startMcpServer(): Promise<void> {
       if (name === 'bulk_archive_memories') return handlers.bulkArchiveMemories(args);
       if (name === 'export_project_memory') return handlers.exportProjectMemory(args);
       if (name === 'get_memory_health_report') return handlers.getMemoryHealthReport(args);
+      if (name === 'get_service_diagnostics') return handlers.getServiceDiagnostics(args);
       throw new Error(`Unknown tool: ${name}`);
     })();
 

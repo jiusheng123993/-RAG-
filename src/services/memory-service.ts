@@ -86,6 +86,10 @@ interface HealthReportInput {
   workspacePath: string;
 }
 
+interface DiagnosticsInput {
+  workspacePath?: string;
+}
+
 function assertText(value: string, name: string): void {
   if (value.trim().length === 0) {
     throw new Error(`${name} must not be empty`);
@@ -327,6 +331,55 @@ export function createMemoryService(adapter: SqliteAdapter, resolver: ProjectRes
         })),
         risks
       };
+    },
+
+    async getServiceDiagnostics(input: DiagnosticsInput) {
+      const health = adapter.checkDatabaseHealth();
+      const fts5Available = adapter.checkFts5Available();
+      const tableInfo = adapter.getTableInfo();
+
+      const result: {
+        ok: boolean;
+        version: string;
+        dataHome: string;
+        databasePath: string;
+        database: { ok: boolean; error?: string };
+        fts5: { available: boolean };
+        tables: { memories: number; projects: number; handoffs: number; importBatches: number };
+        mcpTools: { count: number; names: string[] };
+        project?: { id: string; name: string; workspacePath: string };
+      } = {
+        ok: health.ok,
+        version: '0.1.0',
+        dataHome: '',
+        databasePath: '',
+        database: { ok: health.ok, error: health.error },
+        fts5: { available: fts5Available },
+        tables: tableInfo,
+        mcpTools: { count: 16, names: [] }
+      };
+
+      if (input.workspacePath) {
+        try {
+          const resolved = await resolver.resolve(input.workspacePath);
+          const project = adapter.upsertProject(resolved);
+          result.dataHome = project.workspacePath;
+          result.databasePath = project.workspacePath;
+          result.project = { id: project.id, name: project.name, workspacePath: project.workspacePath };
+          result.mcpTools.names = [
+            'remember_project_context', 'search_project_memory', 'find_related_memories',
+            'get_memory_detail', 'update_project_memory', 'detect_duplicate_memories',
+            'preview_knowledge_import', 'import_knowledge_files', 'list_import_batches',
+            'get_project_brief', 'record_handoff_note', 'list_project_memories',
+            'archive_project_memory', 'bulk_archive_memories', 'export_project_memory',
+            'get_memory_health_report', 'get_service_diagnostics'
+          ];
+        } catch {
+          // ignore project resolution errors
+        }
+      }
+
+      return result;
     },
 
     async recordHandoffNote(input: HandoffInput) {

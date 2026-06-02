@@ -42,7 +42,7 @@
 1. 知识库核心治理底座：已完成记忆详情、更新、内容 hash、来源路径、重复检测。
 2. 本地文档导入能力：已完成显式导入 Markdown / 文本文件或目录，支持 dry-run、跳过敏感路径和导入批次。
 3. 检索增强：已完成标签、来源、状态、时间、重要级别过滤，支持归档显式检索、结果裁剪、命中字段标记和相关记忆查询。
-4. 知识维护与治理工具（进行中）：批量归档、导出、知识库健康报告。
+4. 知识维护与治理工具：批量归档、导出、知识库健康报告。
 5. 接入体验与诊断：本地 doctor、迁移状态、MCP 工具和数据库健康检查。
 
 详细规格见：
@@ -82,6 +82,13 @@ npm run test
 npm run build
 ```
 
+## 诊断命令
+
+```bash
+node dist/index.js --doctor
+node dist/index.js --migrate-status
+```
+
 ## 打印配置
 
 ```bash
@@ -113,7 +120,7 @@ LOCAL_PROJECT_MEMORY_HOME=E:\个人本地知识库\.memory-data
 
 ## MCP 工具
 
-当前已实现 16 个工具：
+当前已实现 17 个工具：
 
 | 工具 | 作用 |
 |---|---|
@@ -133,6 +140,7 @@ LOCAL_PROJECT_MEMORY_HOME=E:\个人本地知识库\.memory-data
 | `bulk_archive_memories` | 批量归档项目记忆，支持手动指定或按条件自动筛选 |
 | `export_project_memory` | 导出项目记忆为 JSON 或 Markdown 格式 |
 | `get_memory_health_report` | 生成知识库健康报告，包含统计信息、风险提示和高优先级记忆 |
+| `get_service_diagnostics` | 检查服务、数据库和工具状态，返回诊断信息 |
 
 后续规划工具按阶段引入，未实现前不要在 Trae 配置或工作流中假设可用。
 

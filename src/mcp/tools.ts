@@ -10,6 +10,7 @@ import {
   getMemoryDetailSchema,
   getMemoryHealthReportSchema,
   getProjectBriefSchema,
+  getServiceDiagnosticsSchema,
   knowledgeImportSchema,
   listImportBatchesSchema,
   listProjectMemoriesSchema,
@@ -74,6 +75,9 @@ export function createToolHandlers(dependencies: ToolDependencies) {
     },
     async getMemoryHealthReport(input: unknown) {
       return dependencies.memoryService.getMemoryHealthReport(getMemoryHealthReportSchema.parse(input));
+    },
+    async getServiceDiagnostics(input: unknown) {
+      return dependencies.memoryService.getServiceDiagnostics(getServiceDiagnosticsSchema.parse(input));
     }
   };
 }

@@ -124,3 +124,7 @@ export const exportProjectMemorySchema = z.object({
 export const getMemoryHealthReportSchema = z.object({
   workspacePath: z.string().min(1)
 });
+
+export const getServiceDiagnosticsSchema = z.object({
+  workspacePath: z.string().min(1).optional()
+});
