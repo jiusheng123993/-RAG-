@@ -15,6 +15,9 @@
 - 读取单条记忆详情。
 - 更新单条项目记忆。
 - 检测当前项目内重复记忆。
+- 预览并导入用户明确指定的 Markdown / 文本文档。
+- 记录导入批次和导入条目。
+- 默认跳过敏感文件、无关目录和超大文件。
 - 归档过期记忆。
 - 记录来源路径和内容 hash。
 - 按工作区路径、Git remote、Git branch 生成项目指纹。
@@ -37,8 +40,8 @@
 完整知识库能力按模块串行推进：
 
 1. 知识库核心治理底座：已完成记忆详情、更新、内容 hash、来源路径、重复检测。
-2. 本地文档导入能力：待实现显式导入 Markdown / 文本文件或目录，支持 dry-run、跳过敏感路径和导入批次。
-3. 检索增强：标签、来源、状态、时间、重要级别过滤，以及结果裁剪和排序增强。
+2. 本地文档导入能力：已完成显式导入 Markdown / 文本文件或目录，支持 dry-run、跳过敏感路径和导入批次。
+3. 检索增强：待实现标签、来源、状态、时间、重要级别过滤，以及结果裁剪和排序增强。
 4. 知识维护与治理工具：批量归档、导出、知识库健康报告。
 5. 接入体验与诊断：本地 doctor、迁移状态、MCP 工具和数据库健康检查。
 
@@ -110,7 +113,7 @@ LOCAL_PROJECT_MEMORY_HOME=E:\个人本地知识库\.memory-data
 
 ## MCP 工具
 
-当前已实现 9 个工具：
+当前已实现 12 个工具：
 
 | 工具 | 作用 |
 |---|---|
@@ -119,6 +122,9 @@ LOCAL_PROJECT_MEMORY_HOME=E:\个人本地知识库\.memory-data
 | `get_memory_detail` | 读取当前项目内单条记忆详情 |
 | `update_project_memory` | 更新当前项目内单条记忆 |
 | `detect_duplicate_memories` | 按内容或记忆 ID 检测当前项目内重复 active 记忆 |
+| `preview_knowledge_import` | 预览用户明确指定的 Markdown / 文本文档导入结果 |
+| `import_knowledge_files` | 导入用户明确指定的 Markdown / 文本文档 |
+| `list_import_batches` | 分页列出当前项目导入批次 |
 | `get_project_brief` | 获取项目简报和最近交接记录 |
 | `record_handoff_note` | 记录任务完成后的交接信息 |
 | `list_project_memories` | 分页列出项目记忆 |
@@ -128,7 +134,6 @@ LOCAL_PROJECT_MEMORY_HOME=E:\个人本地知识库\.memory-data
 
 | 阶段 | 规划工具 |
 |---|---|
-| 本地文档导入 | `preview_knowledge_import`、`import_knowledge_files`、`list_import_batches` |
 | 检索增强 | `find_related_memories` |
 | 知识维护与治理 | `bulk_archive_memories`、`export_project_memory`、`get_memory_health_report` |
 | 接入体验与诊断 | `get_service_diagnostics` |

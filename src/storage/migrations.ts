@@ -41,6 +41,31 @@ export const migrations = [
     created_at TEXT NOT NULL,
     FOREIGN KEY(project_id) REFERENCES projects(id)
   )`,
+  `CREATE TABLE IF NOT EXISTS import_batches (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    root_path TEXT NOT NULL,
+    status TEXT NOT NULL,
+    total_files INTEGER NOT NULL,
+    imported_count INTEGER NOT NULL,
+    skipped_count INTEGER NOT NULL,
+    failed_count INTEGER NOT NULL,
+    options TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(project_id) REFERENCES projects(id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS import_items (
+    id TEXT PRIMARY KEY,
+    batch_id TEXT NOT NULL,
+    memory_id TEXT,
+    file_path TEXT NOT NULL,
+    status TEXT NOT NULL,
+    reason TEXT,
+    content_hash TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(batch_id) REFERENCES import_batches(id),
+    FOREIGN KEY(memory_id) REFERENCES memories(id)
+  )`,
   `CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
     memory_id UNINDEXED,
     project_id UNINDEXED,
@@ -52,5 +77,7 @@ export const migrations = [
   `CREATE INDEX IF NOT EXISTS idx_memories_project_status ON memories(project_id, status)`,
   `CREATE INDEX IF NOT EXISTS idx_memories_project_type ON memories(project_id, type)`,
   `CREATE INDEX IF NOT EXISTS idx_memories_project_hash ON memories(project_id, content_hash)`,
+  `CREATE INDEX IF NOT EXISTS idx_import_batches_project_created ON import_batches(project_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_import_items_batch ON import_items(batch_id)`,
   `CREATE INDEX IF NOT EXISTS idx_handoff_project_created ON handoff_notes(project_id, created_at)`
 ];

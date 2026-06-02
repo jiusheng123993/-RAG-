@@ -151,6 +151,9 @@ archive_project_memory
 | `get_memory_detail` | 查看单条记忆详情 |
 | `update_project_memory` | 更新单条项目记忆 |
 | `detect_duplicate_memories` | 检测当前项目内重复记忆 |
+| `preview_knowledge_import` | 预览 Markdown / 文本文档导入结果 |
+| `import_knowledge_files` | 导入用户明确指定的 Markdown / 文本文档 |
+| `list_import_batches` | 分页查看导入批次 |
 | `get_project_brief` | 新会话读取项目简报 |
 | `record_handoff_note` | 任务完成后写交接记录 |
 | `list_project_memories` | 分页查看项目记忆 |
@@ -160,7 +163,6 @@ archive_project_memory
 
 | 阶段 | 规划工具 | 使用场景 |
 |---|---|---|
-| 本地文档导入 | `preview_knowledge_import`、`import_knowledge_files`、`list_import_batches` | 预览并导入 Markdown / 文本文档 |
 | 检索增强 | `find_related_memories` | 查找相关记忆 |
 | 知识维护与治理 | `bulk_archive_memories`、`export_project_memory`、`get_memory_health_report` | 批量归档、导出、健康报告 |
 | 接入体验与诊断 | `get_service_diagnostics` | 检查服务、数据库和工具状态 |

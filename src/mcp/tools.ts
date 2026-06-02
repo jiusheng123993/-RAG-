@@ -1,3 +1,4 @@
+import type { createImportService } from '../services/import-service.js';
 import type { createMemoryService } from '../services/memory-service.js';
 import type { createRetrievalService } from '../services/retrieval-service.js';
 import {
@@ -5,6 +6,8 @@ import {
   detectDuplicateMemoriesSchema,
   getMemoryDetailSchema,
   getProjectBriefSchema,
+  knowledgeImportSchema,
+  listImportBatchesSchema,
   listProjectMemoriesSchema,
   recordHandoffNoteSchema,
   rememberProjectContextSchema,
@@ -13,6 +16,7 @@ import {
 } from './schemas.js';
 
 interface ToolDependencies {
+  importService: ReturnType<typeof createImportService>;
   memoryService: ReturnType<typeof createMemoryService>;
   retrievalService: ReturnType<typeof createRetrievalService>;
 }
@@ -24,6 +28,15 @@ export function createToolHandlers(dependencies: ToolDependencies) {
     },
     async searchProjectMemory(input: unknown) {
       return dependencies.retrievalService.searchProjectMemory(searchProjectMemorySchema.parse(input));
+    },
+    async previewKnowledgeImport(input: unknown) {
+      return dependencies.importService.previewKnowledgeImport(knowledgeImportSchema.parse(input));
+    },
+    async importKnowledgeFiles(input: unknown) {
+      return dependencies.importService.importKnowledgeFiles(knowledgeImportSchema.parse(input));
+    },
+    async listImportBatches(input: unknown) {
+      return dependencies.importService.listImportBatches(listImportBatchesSchema.parse(input));
     },
     async getMemoryDetail(input: unknown) {
       return dependencies.memoryService.getMemoryDetail(getMemoryDetailSchema.parse(input));

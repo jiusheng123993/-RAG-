@@ -45,6 +45,21 @@ export const searchProjectMemorySchema = z.object({
   limit: z.number().int().min(1).max(50).optional()
 });
 
+export const knowledgeImportSchema = z.object({
+  workspacePath: z.string().min(1),
+  paths: z.array(z.string().min(1)).min(1),
+  include: z.array(z.string()).optional(),
+  exclude: z.array(z.string()).optional(),
+  tags: z.array(z.string()).optional(),
+  maxFileBytes: z.number().int().min(1).optional()
+});
+
+export const listImportBatchesSchema = z.object({
+  workspacePath: z.string().min(1),
+  limit: z.number().int().min(1).max(100).optional(),
+  offset: z.number().int().min(0).optional()
+});
+
 export const getProjectBriefSchema = z.object({
   workspacePath: z.string().min(1),
   includeRecentHandoffs: z.boolean().optional(),

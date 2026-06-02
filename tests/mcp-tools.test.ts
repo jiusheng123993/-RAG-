@@ -1,7 +1,9 @@
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createToolHandlers } from '../src/mcp/tools.js';
+import { createImportService } from '../src/services/import-service.js';
 import { createMemoryService } from '../src/services/memory-service.js';
 import { createProjectResolver } from '../src/services/project-resolver.js';
 import { createRetrievalService } from '../src/services/retrieval-service.js';
@@ -14,6 +16,7 @@ function createHandlers() {
   return {
     adapter,
     handlers: createToolHandlers({
+      importService: createImportService(adapter, resolver),
       memoryService: createMemoryService(adapter, resolver),
       retrievalService: createRetrievalService(adapter, resolver)
     })
@@ -54,10 +57,25 @@ describe('mcp tool handlers', () => {
     adapter.close();
   });
 
+  it('通过 handler 预览、导入并列出导入批次', async () => {
+    const { adapter, handlers } = createHandlers();
+    const root = path.join(os.tmpdir(), `local-project-memory-mcp-import-${Date.now()}-${Math.random()}`);
+    fs.mkdirSync(root, { recursive: true });
+    fs.writeFileSync(path.join(root, 'guide.md'), '# MCP 导入\n内容', 'utf8');
+    const preview = await handlers.previewKnowledgeImport({ workspacePath: root, paths: [root], tags: ['MCP'] });
+    const imported = await handlers.importKnowledgeFiles({ workspacePath: root, paths: [root], tags: ['MCP'] });
+    const batches = await handlers.listImportBatches({ workspacePath: root });
+    expect(preview.candidates[0]?.title).toBe('MCP 导入');
+    expect(imported.importedCount).toBe(1);
+    expect(batches.total).toBe(1);
+    adapter.close();
+  });
+
   it('拒绝非法参数', async () => {
     const { adapter, handlers } = createHandlers();
     await expect(handlers.rememberProjectContext({ workspacePath: 'E:/demo', type: 'unknown', title: 'x', content: 'x' })).rejects.toThrow();
     await expect(handlers.updateProjectMemory({ workspacePath: 'E:/demo', memoryId: 'mem_x', importance: 6 })).rejects.toThrow();
+    await expect(handlers.previewKnowledgeImport({ workspacePath: 'E:/demo', paths: [] })).rejects.toThrow();
     adapter.close();
   });
 });

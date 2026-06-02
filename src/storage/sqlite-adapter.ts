@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
+import type { ImportBatchRecord, ImportBatchStatus, ImportItemRecord, ImportItemStatus } from '../types/import.js';
 import type { HandoffNoteRecord, MemoryRecord, MemoryStatus, MemoryType } from '../types/memory.js';
 import type { ProjectIdentity, ResolvedProjectInput } from '../types/project.js';
 import { createId } from '../utils/ids.js';
@@ -16,6 +17,7 @@ interface MemoryInsertInput {
   summary: string | null;
   source: string;
   sourcePath?: string | null;
+  contentHash?: string | null;
   tags: string[];
   importance: number;
 }
@@ -50,6 +52,31 @@ interface HandoffInsertInput {
   nextSteps: string;
 }
 
+interface ImportBatchInsertInput {
+  projectId: string;
+  rootPath: string;
+  status: ImportBatchStatus;
+  totalFiles: number;
+  importedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  options: Record<string, unknown>;
+}
+
+interface ImportItemInsertInput {
+  batchId: string;
+  memoryId: string | null;
+  filePath: string;
+  status: ImportItemStatus;
+  reason: string | null;
+  contentHash: string | null;
+}
+
+interface ImportBatchListOutput {
+  items: ImportBatchRecord[];
+  total: number;
+}
+
 interface MemoryListOutput {
   items: MemoryRecord[];
   total: number;
@@ -66,6 +93,9 @@ export interface SqliteAdapter {
   archiveMemory(projectId: string, memoryId: string): MemoryRecord | null;
   createHandoffNote(input: HandoffInsertInput): HandoffNoteRecord;
   listRecentHandoffs(projectId: string, limit: number): HandoffNoteRecord[];
+  createImportBatch(input: ImportBatchInsertInput): ImportBatchRecord;
+  createImportItem(input: ImportItemInsertInput): ImportItemRecord;
+  listImportBatches(projectId: string, limit: number, offset: number): ImportBatchListOutput;
   searchMemories(input: { projectId: string; query: string; types?: MemoryType[]; limit: number }): MemoryRecord[];
   close(): void;
 }
@@ -115,6 +145,34 @@ function rowToHandoff(row: Record<string, unknown>): HandoffNoteRecord {
     verification: String(row.verification),
     risks: String(row.risks),
     nextSteps: String(row.next_steps),
+    createdAt: String(row.created_at)
+  };
+}
+
+function rowToImportBatch(row: Record<string, unknown>): ImportBatchRecord {
+  return {
+    id: String(row.id),
+    projectId: String(row.project_id),
+    rootPath: String(row.root_path),
+    status: row.status as ImportBatchStatus,
+    totalFiles: Number(row.total_files),
+    importedCount: Number(row.imported_count),
+    skippedCount: Number(row.skipped_count),
+    failedCount: Number(row.failed_count),
+    options: JSON.parse(String(row.options)) as Record<string, unknown>,
+    createdAt: String(row.created_at)
+  };
+}
+
+function rowToImportItem(row: Record<string, unknown>): ImportItemRecord {
+  return {
+    id: String(row.id),
+    batchId: String(row.batch_id),
+    memoryId: row.memory_id === null ? null : String(row.memory_id),
+    filePath: String(row.file_path),
+    status: row.status as ImportItemStatus,
+    reason: row.reason === null ? null : String(row.reason),
+    contentHash: row.content_hash === null ? null : String(row.content_hash),
     createdAt: String(row.created_at)
   };
 }
@@ -181,7 +239,7 @@ export function createSqliteAdapter(databasePath: string): SqliteAdapter {
       const id = createId('mem');
       const timestamp = nowIso();
       const tags = JSON.stringify(input.tags);
-      const contentHash = sha256(input.content);
+      const contentHash = input.contentHash ?? sha256(input.content);
       database.prepare("INSERT INTO memories (id, project_id, type, title, content, summary, source, source_path, content_hash, tags, status, importance, created_at, updated_at, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, NULL)").run(
         id,
         input.projectId,
@@ -283,6 +341,46 @@ export function createSqliteAdapter(databasePath: string): SqliteAdapter {
     listRecentHandoffs(projectId: string, limit: number): HandoffNoteRecord[] {
       const rows = database.prepare('SELECT * FROM handoff_notes WHERE project_id = ? ORDER BY created_at DESC LIMIT ?').all(projectId, limit) as Record<string, unknown>[];
       return rows.map(rowToHandoff);
+    },
+
+    createImportBatch(input: ImportBatchInsertInput): ImportBatchRecord {
+      const id = createId('import');
+      const timestamp = nowIso();
+      database.prepare('INSERT INTO import_batches (id, project_id, root_path, status, total_files, imported_count, skipped_count, failed_count, options, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+        id,
+        input.projectId,
+        input.rootPath,
+        input.status,
+        input.totalFiles,
+        input.importedCount,
+        input.skippedCount,
+        input.failedCount,
+        JSON.stringify(input.options),
+        timestamp
+      );
+      return rowToImportBatch(database.prepare('SELECT * FROM import_batches WHERE id = ?').get(id) as Record<string, unknown>);
+    },
+
+    createImportItem(input: ImportItemInsertInput): ImportItemRecord {
+      const id = createId('import_item');
+      const timestamp = nowIso();
+      database.prepare('INSERT INTO import_items (id, batch_id, memory_id, file_path, status, reason, content_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+        id,
+        input.batchId,
+        input.memoryId,
+        input.filePath,
+        input.status,
+        input.reason,
+        input.contentHash,
+        timestamp
+      );
+      return rowToImportItem(database.prepare('SELECT * FROM import_items WHERE id = ?').get(id) as Record<string, unknown>);
+    },
+
+    listImportBatches(projectId: string, limit: number, offset: number): ImportBatchListOutput {
+      const totalRow = database.prepare('SELECT COUNT(*) AS total FROM import_batches WHERE project_id = ?').get(projectId) as { total: number };
+      const rows = database.prepare('SELECT * FROM import_batches WHERE project_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?').all(projectId, limit, offset) as Record<string, unknown>[];
+      return { total: Number(totalRow.total), items: rows.map(rowToImportBatch) };
     },
 
     searchMemories(input: { projectId: string; query: string; types?: MemoryType[]; limit: number }): MemoryRecord[] {
