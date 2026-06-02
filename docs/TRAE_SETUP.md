@@ -142,14 +142,28 @@ archive_project_memory
 
 ## 5. MCP 工具列表
 
+当前已实现工具：
+
 | 工具 | 使用场景 |
 |---|---|
 | `remember_project_context` | 写入长期项目记忆 |
 | `search_project_memory` | 搜索当前项目记忆 |
+| `get_memory_detail` | 查看单条记忆详情 |
+| `update_project_memory` | 更新单条项目记忆 |
+| `detect_duplicate_memories` | 检测当前项目内重复记忆 |
 | `get_project_brief` | 新会话读取项目简报 |
 | `record_handoff_note` | 任务完成后写交接记录 |
 | `list_project_memories` | 分页查看项目记忆 |
 | `archive_project_memory` | 归档过期记忆 |
+
+后续规划工具按阶段引入，未实现前不要在 Trae 工作流中假设可用：
+
+| 阶段 | 规划工具 | 使用场景 |
+|---|---|---|
+| 本地文档导入 | `preview_knowledge_import`、`import_knowledge_files`、`list_import_batches` | 预览并导入 Markdown / 文本文档 |
+| 检索增强 | `find_related_memories` | 查找相关记忆 |
+| 知识维护与治理 | `bulk_archive_memories`、`export_project_memory`、`get_memory_health_report` | 批量归档、导出、健康报告 |
+| 接入体验与诊断 | `get_service_diagnostics` | 检查服务、数据库和工具状态 |
 
 ## 6. 安全提醒
 

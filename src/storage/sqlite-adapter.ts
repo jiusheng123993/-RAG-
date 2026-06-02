@@ -5,6 +5,7 @@ import type { HandoffNoteRecord, MemoryRecord, MemoryStatus, MemoryType } from '
 import type { ProjectIdentity, ResolvedProjectInput } from '../types/project.js';
 import { createId } from '../utils/ids.js';
 import { nowIso } from '../utils/time.js';
+import { sha256 } from '../utils/hash.js';
 import { migrations } from './migrations.js';
 
 interface MemoryInsertInput {
@@ -14,8 +15,20 @@ interface MemoryInsertInput {
   content: string;
   summary: string | null;
   source: string;
+  sourcePath?: string | null;
   tags: string[];
   importance: number;
+}
+
+interface MemoryUpdateInput {
+  type?: MemoryType;
+  title?: string;
+  content?: string;
+  summary?: string | null;
+  source?: string;
+  sourcePath?: string | null;
+  tags?: string[];
+  importance?: number;
 }
 
 interface MemoryListInput {
@@ -46,6 +59,9 @@ export interface SqliteAdapter {
   initialize(): void;
   upsertProject(input: ResolvedProjectInput): ProjectIdentity;
   createMemory(input: MemoryInsertInput): MemoryRecord;
+  getMemory(projectId: string, memoryId: string): MemoryRecord | null;
+  updateMemory(projectId: string, memoryId: string, input: MemoryUpdateInput): MemoryRecord | null;
+  findDuplicateMemories(projectId: string, contentHash: string, limit: number): MemoryRecord[];
   listMemories(input: MemoryListInput): MemoryListOutput;
   archiveMemory(projectId: string, memoryId: string): MemoryRecord | null;
   createHandoffNote(input: HandoffInsertInput): HandoffNoteRecord;
@@ -77,6 +93,8 @@ function rowToMemory(row: Record<string, unknown>): MemoryRecord {
     content: String(row.content),
     summary: row.summary === null ? null : String(row.summary),
     source: String(row.source),
+    sourcePath: row.source_path === null || row.source_path === undefined ? null : String(row.source_path),
+    contentHash: row.content_hash === null || row.content_hash === undefined ? null : String(row.content_hash),
     tags: JSON.parse(String(row.tags)) as string[],
     status: row.status as MemoryStatus,
     importance: Number(row.importance),
@@ -101,6 +119,19 @@ function rowToHandoff(row: Record<string, unknown>): HandoffNoteRecord {
   };
 }
 
+function addColumnIfMissing(database: DatabaseSync, tableName: string, columnName: string, definition: string): void {
+  const rows = database.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+  if (!rows.some((row) => row.name === columnName)) {
+    database.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+  }
+}
+
+function refreshFts(database: DatabaseSync, memory: MemoryRecord): void {
+  const tags = JSON.stringify(memory.tags);
+  database.prepare('DELETE FROM memory_fts WHERE memory_id = ?').run(memory.id);
+  database.prepare('INSERT INTO memory_fts (memory_id, project_id, title, content, summary, tags) VALUES (?, ?, ?, ?, ?, ?)').run(memory.id, memory.projectId, memory.title, memory.content, memory.summary ?? '', tags);
+}
+
 export function createSqliteAdapter(databasePath: string): SqliteAdapter {
   fs.mkdirSync(path.dirname(databasePath), { recursive: true });
   const database = new DatabaseSync(databasePath);
@@ -111,6 +142,8 @@ export function createSqliteAdapter(databasePath: string): SqliteAdapter {
       for (const migration of migrations) {
         database.exec(migration);
       }
+      addColumnIfMissing(database, 'memories', 'source_path', 'TEXT');
+      addColumnIfMissing(database, 'memories', 'content_hash', 'TEXT');
     },
 
     upsertProject(input: ResolvedProjectInput): ProjectIdentity {
@@ -148,7 +181,8 @@ export function createSqliteAdapter(databasePath: string): SqliteAdapter {
       const id = createId('mem');
       const timestamp = nowIso();
       const tags = JSON.stringify(input.tags);
-      database.prepare("INSERT INTO memories (id, project_id, type, title, content, summary, source, tags, status, importance, created_at, updated_at, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, NULL)").run(
+      const contentHash = sha256(input.content);
+      database.prepare("INSERT INTO memories (id, project_id, type, title, content, summary, source, source_path, content_hash, tags, status, importance, created_at, updated_at, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, NULL)").run(
         id,
         input.projectId,
         input.type,
@@ -156,13 +190,61 @@ export function createSqliteAdapter(databasePath: string): SqliteAdapter {
         input.content,
         input.summary,
         input.source,
+        input.sourcePath ?? null,
+        contentHash,
         tags,
         input.importance,
         timestamp,
         timestamp
       );
-      database.prepare('INSERT INTO memory_fts (memory_id, project_id, title, content, summary, tags) VALUES (?, ?, ?, ?, ?, ?)').run(id, input.projectId, input.title, input.content, input.summary ?? '', tags);
-      return rowToMemory(database.prepare('SELECT * FROM memories WHERE id = ?').get(id) as Record<string, unknown>);
+      const memory = rowToMemory(database.prepare('SELECT * FROM memories WHERE id = ?').get(id) as Record<string, unknown>);
+      refreshFts(database, memory);
+      return memory;
+    },
+
+    getMemory(projectId: string, memoryId: string): MemoryRecord | null {
+      const row = database.prepare('SELECT * FROM memories WHERE id = ? AND project_id = ?').get(memoryId, projectId) as Record<string, unknown> | undefined;
+      return row ? rowToMemory(row) : null;
+    },
+
+    updateMemory(projectId: string, memoryId: string, input: MemoryUpdateInput): MemoryRecord | null {
+      const existing = this.getMemory(projectId, memoryId);
+      if (!existing) return null;
+      const next = {
+        type: input.type ?? existing.type,
+        title: input.title ?? existing.title,
+        content: input.content ?? existing.content,
+        summary: input.summary === undefined ? existing.summary : input.summary,
+        source: input.source ?? existing.source,
+        sourcePath: input.sourcePath === undefined ? existing.sourcePath : input.sourcePath,
+        tags: input.tags ?? existing.tags,
+        importance: input.importance ?? existing.importance
+      };
+      const timestamp = nowIso();
+      const tags = JSON.stringify(next.tags);
+      const contentHash = sha256(next.content);
+      database.prepare('UPDATE memories SET type = ?, title = ?, content = ?, summary = ?, source = ?, source_path = ?, content_hash = ?, tags = ?, importance = ?, updated_at = ? WHERE id = ? AND project_id = ?').run(
+        next.type,
+        next.title,
+        next.content,
+        next.summary,
+        next.source,
+        next.sourcePath,
+        contentHash,
+        tags,
+        next.importance,
+        timestamp,
+        memoryId,
+        projectId
+      );
+      const memory = this.getMemory(projectId, memoryId);
+      if (memory) refreshFts(database, memory);
+      return memory;
+    },
+
+    findDuplicateMemories(projectId: string, contentHash: string, limit: number): MemoryRecord[] {
+      const rows = database.prepare('SELECT * FROM memories WHERE project_id = ? AND content_hash = ? AND status = \'active\' ORDER BY updated_at DESC LIMIT ?').all(projectId, contentHash, limit) as Record<string, unknown>[];
+      return rows.map(rowToMemory);
     },
 
     listMemories(input: MemoryListInput): MemoryListOutput {
@@ -205,10 +287,10 @@ export function createSqliteAdapter(databasePath: string): SqliteAdapter {
 
     searchMemories(input: { projectId: string; query: string; types?: MemoryType[]; limit: number }): MemoryRecord[] {
       const terms = input.query.split(/\s+/).map((term) => term.trim()).filter((term) => term.length > 0);
-      const likeClauses = terms.map(() => '(memories.title LIKE ? OR memories.content LIKE ? OR memories.summary LIKE ? OR memories.tags LIKE ?)');
+      const likeClauses = terms.map(() => '(memories.title LIKE ? OR memories.content LIKE ? OR memories.summary LIKE ? OR memories.tags LIKE ? OR memories.source_path LIKE ?)');
       const likeParams = terms.flatMap((term) => {
         const likeTerm = `%${term}%`;
-        return [likeTerm, likeTerm, likeTerm, likeTerm];
+        return [likeTerm, likeTerm, likeTerm, likeTerm, likeTerm];
       });
       const typeClause = input.types && input.types.length > 0 ? ` AND type IN (${input.types.map(() => '?').join(',')})` : '';
       const rows = database.prepare(`SELECT DISTINCT memories.* FROM memories WHERE memories.project_id = ? AND memories.status = 'active'${typeClause} AND (${likeClauses.join(' AND ')} OR memories.id IN (SELECT memory_id FROM memory_fts WHERE project_id = ? AND memory_fts MATCH ?)) ORDER BY memories.updated_at DESC LIMIT ?`).all(

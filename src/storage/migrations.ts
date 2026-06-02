@@ -1,4 +1,4 @@
-﻿export const migrations = [
+export const migrations = [
   `CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -18,6 +18,8 @@
     content TEXT NOT NULL,
     summary TEXT,
     source TEXT NOT NULL,
+    source_path TEXT,
+    content_hash TEXT,
     tags TEXT NOT NULL,
     status TEXT NOT NULL,
     importance INTEGER NOT NULL,
@@ -49,5 +51,6 @@
   )`,
   `CREATE INDEX IF NOT EXISTS idx_memories_project_status ON memories(project_id, status)`,
   `CREATE INDEX IF NOT EXISTS idx_memories_project_type ON memories(project_id, type)`,
+  `CREATE INDEX IF NOT EXISTS idx_memories_project_hash ON memories(project_id, content_hash)`,
   `CREATE INDEX IF NOT EXISTS idx_handoff_project_created ON handoff_notes(project_id, created_at)`
 ];
