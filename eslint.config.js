@@ -3,7 +3,7 @@ import tseslint from 'typescript-eslint';
 
 export default [
   {
-    ignores: ['dist/**', 'dist-electron/**', 'node_modules/**', '.superpowers/**', 'test-http.mjs']
+    ignores: ['dist/**', 'dist-electron/**', 'release/**', 'node_modules/**', '.superpowers/**', 'test-http.mjs', 'check-projects.mjs']
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
